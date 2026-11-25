@@ -1,0 +1,69 @@
+name: Build and deploy to Azure (dev)
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true
+
+env:
+  IMAGE: ${{ vars.ACR_NAME }}.azurecr.io/czat
+  SLOT_NAME: dev
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pobierz kod
+        uses: actions/checkout@v4
+
+      - name: Zaloguj do Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Zainstaluj Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Skompiluj aplikacje
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/czat .
+
+      - name: Zaloguj do ACR
+        run: az acr login --name "${{ vars.ACR_NAME }}"
+
+      # Tagi dev-<sha> i dev zamiast latest, zeby nie nadpisac obrazu produkcyjnego
+      - name: Zbuduj i wypchnij obraz
+        run: |
+          docker build -t "$IMAGE:dev-${{ github.sha }}" -t "$IMAGE:dev" .
+          docker push "$IMAGE:dev-${{ github.sha }}"
+          docker push "$IMAGE:dev"
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Zaloguj do Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Wdroz obraz na slot dev
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.WEBAPP_NAME }}
+          slot-name: ${{ env.SLOT_NAME }}
+          images: ${{ env.IMAGE }}:dev-${{ github.sha }}
