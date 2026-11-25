@@ -16,7 +16,6 @@ concurrency:
 
 env:
   IMAGE: ${{ vars.ACR_NAME }}.azurecr.io/czat
-  SLOT_NAME: dev
 
 jobs:
   build:
@@ -61,9 +60,8 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Wdroz obraz na slot dev
+      - name: Wdroz obraz na Web App dev
         uses: azure/webapps-deploy@v3
         with:
-          app-name: ${{ vars.WEBAPP_NAME }}
-          slot-name: ${{ env.SLOT_NAME }}
+          app-name: ${{ vars.WEBAPP_NAME_DEV }}
           images: ${{ env.IMAGE }}:dev-${{ github.sha }}
